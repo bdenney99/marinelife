@@ -1,11 +1,966 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Marine Life</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Galápagos Marine Life Quiz</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    height: 100%;
+    overflow: hidden;   /* nothing scrolls */
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: #08121f;
+    color: #d8ecf8;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  #shell {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    padding: 10px 14px 8px;
+    gap: 8px;
+  }
+
+  /* ── Header ── */
+  header {
+    display: flex;
+    align-items: baseline;
+    justify-content: center;
+    gap: 14px;
+    flex-shrink: 0;
+  }
+  header h1 {
+    font-size: 1.1rem;
+    color: #6bc8f0;
+    white-space: nowrap;
+  }
+  header .info {
+    font-size: 0.78rem;
+    color: #3a5e78;
+    white-space: nowrap;
+  }
+  header .score {
+    font-size: 0.85rem;
+    color: #a0cce8;
+    white-space: nowrap;
+  }
+
+  /* ── Photo row ── */
+  #photo-row, #photo-row-bottom {
+    display: flex;
+    gap: 8px;
+    flex: 0 0 38vh;    /* fixed ~38% of viewport height */
+    min-height: 0;
+  }
+  #photo-row-bottom { display: none; }
+
+  /* Hard mode: two smaller photo rows sandwiching the labels */
+  #shell.hard #photo-row,
+  #shell.hard #photo-row-bottom { flex: 0 0 28vh; display: flex; }
+
+  .photo-slot {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    background: #0d1e30;
+    border: 2px solid #1c3348;
+    border-radius: 10px;
+    overflow: hidden;
+    position: relative;
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  .photo-slot img {
+    width: 100%;
+    flex: 1 1 0;
+    min-height: 0;
+    object-fit: contain;
+    display: block;
+    padding: 4px;
+  }
+  .photo-slot .badge {
+    width: 100%;
+    text-align: center;
+    font-size: 0.65rem;
+    padding: 3px 4px;
+    color: #2a4a60;
+    background: #0d1e30;
+    letter-spacing: 0.03em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex-shrink: 0;
+  }
+  /* Drop-target highlight */
+  .photo-slot.drag-over {
+    border-color: #f0c040;
+    box-shadow: 0 0 0 3px #f0c04044;
+  }
+  .photo-slot.correct {
+    border-color: #38b872;
+    pointer-events: none;
+  }
+  .photo-slot.correct .badge {
+    color: #38b872;
+    font-weight: 600;
+    font-size: 0.7rem;
+  }
+  .photo-slot.wrong {
+    border-color: #d94444;
+    animation: shake 0.35s ease;
+  }
+  .photo-slot.selected-target {
+    border-color: #f0c040;
+    box-shadow: 0 0 0 3px #f0c04044;
+  }
+
+  /* ── Label strip ── */
+  #label-row {
+    display: flex;
+    gap: 6px;
+    flex-shrink: 0;
+    flex-wrap: wrap;
+    align-content: flex-start;
+    min-height: 46px;
+  }
+  /* Hard mode: label row fills all vertical space between the two photo rows */
+  #shell.hard #label-row {
+    align-content: center;
+    min-height: 0;
+    flex: 1;
+  }
+
+  .name-tag {
+    flex: 0 0 auto;    /* size to content; wraps naturally */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    background: #122030;
+    border: 2px solid #1e3a55;
+    border-radius: 8px;
+    padding: 8px 14px;
+    font-size: 2.34rem;
+    line-height: 1.2;
+    cursor: grab;
+    touch-action: none;
+    transition: border-color 0.12s, background 0.12s, opacity 0.2s;
+  }
+  .name-tag:hover {
+    border-color: #3a7aaa;
+    background: #172a40;
+  }
+  .name-tag.selected {
+    border-color: #f0c040;
+    background: #1e3040;
+    box-shadow: 0 0 0 2px #f0c04044;
+  }
+  .name-tag.placed {
+    opacity: 0;
+    pointer-events: none;
+  }
+  .name-tag.wrong-shake {
+    border-color: #d94444;
+    animation: shake 0.35s ease;
+  }
+
+  /* ── Ghost drag element ── */
+  #drag-ghost {
+    position: fixed;
+    pointer-events: none;
+    z-index: 9999;
+    background: #1e3a60;
+    border: 2px solid #f0c040;
+    border-radius: 8px;
+    padding: 8px 14px;
+    font-size: 0.82rem;
+    color: #f0d070;
+    box-shadow: 0 4px 20px #0008;
+    white-space: nowrap;
+    transform: translate(-50%, -50%);
+    display: none;
+  }
+
+  /* ── Completion overlay ── */
+  #completion {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: #08121fdd;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 14px;
+    z-index: 100;
+  }
+  #completion.show { display: flex; }
+  #completion h2 { font-size: 1.8rem; color: #6bc8f0; }
+  #completion .big-score { font-size: 3rem; font-weight: 700; color: #f0c040; }
+  #completion .grade { font-size: 1rem; color: #a0cce8; }
+  #completion .misses { font-size: 0.85rem; color: #3a5e78; }
+  .btn {
+    background: #1a5a8a; color: #e8f4fd; border: none;
+    border-radius: 8px; padding: 11px 28px; font-size: 0.95rem;
+    cursor: pointer; transition: background 0.15s;
+  }
+  .btn:hover { background: #2a7abd; }
+
+  /* ── Difficulty screen ── */
+  #difficulty-screen {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: #08121f;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 10px;
+    z-index: 150;
+  }
+  #difficulty-screen.show { display: flex; }
+  #difficulty-screen h2 { font-size: 1.4rem; color: #6bc8f0; margin-bottom: 6px; }
+  #difficulty-screen p  { font-size: 0.82rem; color: #3a5e78; margin-bottom: 10px; }
+  .diff-btn {
+    width: 240px;
+    background: #0d1e30;
+    border: 2px solid #1c3348;
+    border-radius: 10px;
+    padding: 14px 20px;
+    text-align: left;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+    color: inherit;
+  }
+  .diff-btn:hover { border-color: #3a7aaa; background: #122030; }
+  .diff-btn strong { display: block; font-size: 0.95rem; color: #d8ecf8; margin-bottom: 3px; }
+  .diff-btn span   { font-size: 0.76rem; color: #3a5e78; line-height: 1.35; }
+
+  /* ── Category checkboxes ── */
+  #cat-section { margin-top: 16px; width: 280px; }
+  #cat-label   { font-size: 0.75rem; color: #3a5e78; text-align: center; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.05em; }
+  #cat-grid    { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .cat-cb {
+    display: flex; align-items: center; gap: 7px;
+    background: #0d1e30; border: 1px solid #1c3348; border-radius: 7px;
+    padding: 7px 10px; cursor: pointer; transition: border-color 0.15s, opacity 0.15s;
+  }
+  .cat-cb:hover  { border-color: #3a7aaa; }
+  .cat-cb input  { accent-color: #3a7aaa; width: 15px; height: 15px; cursor: pointer; flex-shrink: 0; }
+  .cat-cb span   { font-size: 0.77rem; color: #d8ecf8; line-height: 1.2; }
+  .cat-cb.off    { opacity: 0.4; }
+
+  @keyframes shake {
+    0%,100% { transform: translateX(0); }
+    25%      { transform: translateX(-7px); }
+    75%      { transform: translateX(7px); }
+  }
+
+  /* ── Sources button & modal ── */
+  #sources-btn {
+    position: fixed;
+    bottom: 10px;
+    right: 12px;
+    background: none;
+    border: 1px solid #a0cce8;
+    border-radius: 50%;
+    width: 26px;
+    height: 26px;
+    font-size: 0.75rem;
+    color: #a0cce8;
+    cursor: pointer;
+    line-height: 1;
+    transition: color 0.15s, border-color 0.15s;
+    z-index: 50;
+  }
+  #sources-btn:hover { color: #ffffff; border-color: #ffffff; }
+
+  #sources-modal {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: #08121fcc;
+    align-items: center;
+    justify-content: center;
+    z-index: 200;
+  }
+  #sources-modal.show { display: flex; }
+  #sources-modal .box {
+    background: #0d1e30;
+    border: 1px solid #1c3348;
+    border-radius: 12px;
+    padding: 22px 26px;
+    max-width: 420px;
+    width: calc(100% - 40px);
+  }
+  #sources-modal h3 {
+    font-size: 0.9rem;
+    color: #6bc8f0;
+    margin-bottom: 14px;
+  }
+  #sources-modal ul {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  #sources-modal li { font-size: 0.82rem; line-height: 1.4; }
+  #sources-modal li span { color: #3a5e78; display: block; font-size: 0.74rem; }
+  #sources-modal a { color: #a0cce8; text-decoration: none; }
+  #sources-modal a:hover { color: #6bc8f0; text-decoration: underline; }
+  #sources-modal .close-btn {
+    margin-top: 18px;
+    display: block;
+    text-align: right;
+  }
+  #sources-modal .close-btn button {
+    background: none;
+    border: 1px solid #1c3348;
+    border-radius: 6px;
+    color: #3a5e78;
+    font-size: 0.78rem;
+    padding: 5px 14px;
+    cursor: pointer;
+  }
+  #sources-modal .close-btn button:hover { color: #d8ecf8; border-color: #3a5e78; }
+
+  /* Round 2 fade-in */
+  .fade-in {
+    animation: fadeIn 0.4s ease;
+  }
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(6px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+</style>
 </head>
 <body>
-  <h1>Hello from marinelife.github.io</h1>
-  <p>GitHub Pages is working!</p>
+
+<div id="shell">
+  <header>
+    <h1>&#x1F40B; Gal&#xE1;pagos Marine Life</h1>
+    <span class="info" id="round-info"></span>
+    <span class="score" id="score-info"></span>
+  </header>
+
+  <div id="photo-row"></div>
+  <div id="label-row"></div>
+  <div id="photo-row-bottom"></div>
+</div>
+
+<div id="drag-ghost"></div>
+
+<button id="sources-btn" onclick="document.getElementById('sources-modal').classList.add('show')" title="Sources">&#x2139;</button>
+
+<div id="sources-modal" onclick="if(event.target===this)this.classList.remove('show')">
+  <div class="box">
+    <h3>Image Sources</h3>
+    <ul>
+      <li>
+        <a href="https://www.fishi-pedia.com/fishes/native_regions/ocean-pacifique-galapagos" target="_blank">fishi-pedia.com — Galápagos Pacific species</a>
+        <span>44 fish photos (surgeonfish, sharks, wrasses, rays, etc.)</span>
+      </li>
+      <li>
+        <a href="https://ceiba.org/wp-content/uploads/Galapagos_Fish_Card_2016.pdf" target="_blank">Ceiba Foundation — Common Reef Fish of Galápagos (2016)</a>
+        <span>26 reef fish photos including damselfish, parrotfish, wrasse phases, grunts</span>
+      </li>
+      <li>
+        <a href="https://happygringo.com/blog/galapagos-fish/" target="_blank">Happy Gringo — Galápagos fish guide</a>
+        <span>6 new species (batfish, hogfish, butterflyfish, grunt, lionfish, parrotfish) + alternate photos of 4 existing species</span>
+      </li>
+      <li>
+        <a href="https://www.lapintagalapagoscruise.com/blog/snorkeling-in-the-galapagos/" target="_blank">La Pinta Galapagos Cruise — Snorkeling guide</a>
+        <span>1 new species (Spot-fin porcupinefish / Pacific Burrfish) + alternate photos of 6 existing species</span>
+      </li>
+      <li>
+        <a href="https://en.wikipedia.org/wiki/Marine_iguana" target="_blank">Wikimedia Commons</a> (via Wikipedia REST API)
+        <span>8 non-fish animals: marine iguana, sea lion, fur seal, penguin, sea turtle, seahorse, eagle ray, whitetip shark — all CC-licensed</span>
+      </li>
+    </ul>
+    <p style="margin-top:16px; font-size:0.74rem; color:#3a5e78;">Made by Bryce Denney with help from Claude.</p>
+    <div class="close-btn"><button onclick="document.getElementById('sources-modal').classList.remove('show')">Close</button></div>
+  </div>
+</div>
+
+<div id="difficulty-screen" class="show">
+  <h2>&#x1F40B; Gal&#xE1;pagos Marine Life</h2>
+  <p>Choose difficulty</p>
+  <button class="diff-btn" onclick="startGame('easy')">
+    <strong>Easy</strong>
+    <span>Animals picked completely at random each round</span>
+  </button>
+  <button class="diff-btn" onclick="startGame('medium')">
+    <strong>Medium</strong>
+    <span>Similar-looking animals grouped together (sharks with sharks, surgeonfish with surgeonfish, etc.)</span>
+  </button>
+  <button class="diff-btn" onclick="startGame('hard')">
+    <strong>Hard</strong>
+    <span>12 animals per round — two photo rows with all labels between them</span>
+  </button>
+  <div id="cat-section">
+    <div id="cat-label">Focus on</div>
+    <div id="cat-grid"></div>
+  </div>
+</div>
+
+<div id="completion">
+  <h2>All done!</h2>
+  <div class="big-score" id="final-score"></div>
+  <div class="grade"  id="final-grade"></div>
+  <div class="misses" id="final-misses"></div>
+  <button class="btn" onclick="document.getElementById('completion').classList.remove('show'); document.getElementById('difficulty-screen').classList.add('show')">Play Again</button>
+</div>
+
+<script>
+const ANIMALS = [
+  { name: "Marine Iguana",           src: "img/marine_iguana.jpg",                   cat: "iconic"  },
+  { name: "Galápagos Sea Lion",      src: "img/sea_lion.jpg",                         cat: "iconic"  },
+  { name: "Galápagos Fur Seal",      src: "img/fur_seal.jpg",                         cat: "iconic"  },
+  { name: "Galápagos Penguin",       src: "img/penguin.jpg",                          cat: "iconic"  },
+  { name: "Green Sea Turtle",        src: "img/sea_turtle.jpg",                       cat: "iconic"  },
+  { name: "Pacific Seahorse",        src: "img/seahorse.jpg",                         cat: "iconic"  },
+  { name: "Ocean sunfish",           src: "img/mola_mola.jpg",                        cat: "iconic"  },
+  { name: "Galápagos Batfish",       src: "img/galapagos_batfish.jpg",                cat: "iconic"  },
+  { name: "Spotted Eagle Ray",       src: "img/eagle_ray.jpg",                        cat: "shark"   },
+  { name: "Whitetip Reef Shark",     src: "img/whitetip_shark.jpg",                   cat: "shark"   },
+  { name: "Silky shark",             src: "img/carcharhinus_falciformis.jpg",          cat: "shark"   },
+  { name: "Sandbar shark",           src: "img/carcharhinus_plumbeus.jpg",             cat: "shark"   },
+  { name: "Tiger shark",             src: "img/galeocerdo_cuvier.jpg",                cat: "shark"   },
+  { name: "Shortfin mako",           src: "img/isurus_oxyrinchus.jpg",                cat: "shark"   },
+  { name: "Blue shark",              src: "img/prionace_glauca.jpg",                  cat: "shark"   },
+  { name: "Largetooth sawfish",      src: "img/pristis_pristis.jpg",                  cat: "shark"   },
+  { name: "Pelagic stingray",        src: "img/pteroplatytrygon_violacea.jpg",         cat: "shark"   },
+  { name: "Whale shark",             src: "img/rhincodon_typus.jpg",                  cat: "shark"   },
+  { name: "Scalloped hammerhead",    src: "img/sphyrna_lewini.jpg",                   cat: "shark"   },
+  { name: "Oceanic manta ray",       src: "img/mobula_birostris.jpg",                 cat: "shark"   },
+  { name: "Golden rim surgeonfish",  src: "img/acanthurus_nigricans.jpg",              cat: "reef"    },
+  { name: "Convict surgeonfish",     src: "img/acanthurus_triostegus.jpg",             cat: "reef"    },
+  { name: "Yellowfin surgeonfish",   src: "img/acanthurus_xanthopterus.jpg",           cat: "reef"    },
+  { name: "Pacific creolefish",      src: "img/cephalopholis_colonus.jpg",             cat: "reef"    },
+  { name: "Blacklip butterflyfish",  src: "img/chaetodon_kleinii.jpg",                cat: "reef"    },
+  { name: "Raccoon butterflyfish",   src: "img/chaetodon_lunula.jpg",                 cat: "reef"    },
+  { name: "Coral hawkfish",          src: "img/cirrhitichthys_oxycephalus.jpg",        cat: "reef"    },
+  { name: "Long-spine porcupinefish",src: "img/diodon_holocanthus.jpg",               cat: "reef"    },
+  { name: "Spot-fin porcupinefish / Pacific Burrfish", src: "img/diodon_hystrix.jpg", cat: "reef"    },
+  { name: "Long-nose butterflyfish", src: "img/forcipiger_flavissimus.jpg",            cat: "reef"    },
+  { name: "Zebra moray",             src: "img/gymnomuraena_zebra.jpg",               cat: "reef"    },
+  { name: "Yellow edged moray",      src: "img/gymnothorax_flavimarginatus.jpg",       cat: "reef"    },
+  { name: "Giant moray",             src: "img/gymnothorax_javanicus.jpg",             cat: "reef"    },
+  { name: "Painted moray",           src: "img/gymnothorax_meleagris.jpg",             cat: "reef"    },
+  { name: "King angelfish",          src: "img/holacanthus_passer.jpg",               cat: "reef"    },
+  { name: "Amarillo snapper",        src: "img/lutjanus_argentiventris.jpg",           cat: "reef"    },
+  { name: "Pinktail triggerfish",    src: "img/melichthys_vidua.jpg",                 cat: "reef"    },
+  { name: "Bignose unicornfish",     src: "img/naso_vlamingii.jpg",                   cat: "reef"    },
+  { name: "Rockmover wrasse",        src: "img/novaculichthys_taeniourus.jpg",         cat: "reef"    },
+  { name: "Spotted boxfish",         src: "img/ostracion_meleagris.jpg",              cat: "reef"    },
+  { name: "Razor surgeonfish",       src: "img/prionurus_laticlavius.jpg",             cat: "reef"    },
+  { name: "Moorish idol",            src: "img/zanclus_cornutus.jpg",                 cat: "reef"    },
+  // From Ceiba Foundation "Common Reef Fish of Galápagos" card (2016)
+  { name: "Blacknosed Butterflyfish / Barberfish", src: "img/barberfish.jpg",          cat: "reef"    },
+  { name: "Three-banded Butterflyfish", src: "img/three-banded_butterflyfish.jpg",    cat: "reef"    },
+  { name: "Ringtail Damselfish",     src: "img/ringtail_damselfish.jpg",              cat: "reef"    },
+  { name: "Yellowtail Damselfish",   src: "img/yellowtail_damselfish.jpg",            cat: "reef"    },
+  { name: "Panamic Sergeant Major",  src: "img/panamic_sergeant_major.jpg",           cat: "reef"    },
+  { name: "Giant Damselfish",        src: "img/giant_damselfish.jpg",                 cat: "reef"    },
+  { name: "Blue and Gold Snapper",   src: "img/blue_gold_snapper.jpg",                cat: "reef"    },
+  { name: "Cortez Rainbow Wrasse (terminal male)", src: "img/cortez_rainbow_wrasse_tm.jpg", cat: "reef" },
+  { name: "Cortez Rainbow Wrasse (female)",        src: "img/cortez_rainbow_wrasse_f.jpg",  cat: "reef" },
+  { name: "Mexican Hogfish (female)",       src: "img/mexican_hogfish_f.jpg",         cat: "reef"    },
+  { name: "Mexican Hogfish (young male)",   src: "img/mexican_hogfish_ym.jpg",        cat: "reef"    },
+  { name: "Mexican Hogfish (terminal male)",src: "img/mexican_hogfish_tm.jpg",        cat: "reef"    },
+  { name: "Orange-sided Triggerfish",src: "img/orange-sided_triggerfish.jpg",         cat: "reef"    },
+  { name: "Blue-chinned Parrotfish", src: "img/blue-chinned_parrotfish_m.jpg",        cat: "reef"    },
+  { name: "Blue-chinned Parrotfish", src: "img/blue-chinned_parrotfish_f.jpg",        cat: "reef"    },
+  { name: "Burrito Grunt",           src: "img/burrito_grunt.jpg",                   cat: "reef"    },
+  { name: "Galapagos Grunt",         src: "img/galapagos_grunt.jpg",                 cat: "reef"    },
+  { name: "Black-striped Salema",    src: "img/black-striped_salema.jpg",             cat: "reef"    },
+  { name: "Scissortail Chromis",     src: "img/scissortail_chromis.jpg",              cat: "reef"    },
+  { name: "Spinster Wrasse (male)",  src: "img/spinster_wrasse_m.jpg",               cat: "reef"    },
+  { name: "Hieroglyphic Hawkfish",   src: "img/hieroglyphic_hawkfish.jpg",            cat: "reef"    },
+  { name: "Panamic Fanged Blenny",   src: "img/panamic_fanged_blenny.jpg",            cat: "reef"    },
+  { name: "Leather Bass",            src: "img/leather_bass.jpg",                    cat: "reef"    },
+  { name: "Guineafowl Pufferfish",   src: "img/guineafowl_pufferfish.jpg",            cat: "reef"    },
+  { name: "Lionfish",                src: "img/lionfish.jpg",                        cat: "reef"    },
+  // Alternate photos of existing species
+  { name: "Painted Moray",           src: "img/painted_moray_2.jpg",                  cat: "reef"    },
+  { name: "Spotted Eagle Ray",       src: "img/spotted_eagle_ray_2.jpg",              cat: "shark"   },
+  { name: "Guineafowl Pufferfish",   src: "img/guineafowl_pufferfish_2.jpg",          cat: "reef"    },
+  { name: "Fin-spot Triplefin",      src: "img/fin-spot_triplefin.jpg",               cat: "reef"    },
+  { name: "Blue-banded Goby",        src: "img/blue_banded_goby.jpg",                 cat: "reef"    },
+  { name: "Razor surgeonfish",       src: "img/razor_surgeonfish_2.jpg",              cat: "reef"    },
+  { name: "Spot-fin porcupinefish / Pacific Burrfish", src: "img/pacific_burrfish.webp", cat: "reef" },
+  { name: "King angelfish",          src: "img/king_angelfish_2.webp",                cat: "reef"    },
+  { name: "Hieroglyphic Hawkfish",   src: "img/hieroglyphic_hawkfish_2.webp",         cat: "reef"    },
+  { name: "Whitetip Reef Shark",     src: "img/whitetip_shark_2.webp",               cat: "shark"   },
+  { name: "Razor surgeonfish",       src: "img/razor_surgeonfish_3.webp",             cat: "reef"    },
+  { name: "Moorish idol",            src: "img/moorish_idol_2.webp",                  cat: "reef"    },
+  { name: "Blue-chinned Parrotfish", src: "img/blue-chinned_parrotfish_2.webp",       cat: "reef"    },
+  // Open water / pelagic fish
+  { name: "Giant trevally",          src: "img/caranx_ignobilis.jpg",                 cat: "pelagic" },
+  { name: "Common dolphinfish",      src: "img/coryphaena_hippurus.jpg",              cat: "pelagic" },
+  { name: "Tropical two-wing flyingfish", src: "img/exocoetus_volitans.jpg",          cat: "pelagic" },
+  { name: "Sailfish",                src: "img/istiophorus_platypterus.jpg",          cat: "pelagic" },
+  { name: "Barred flagtail",         src: "img/kuhlia_mugil.jpg",                    cat: "pelagic" },
+  { name: "Pilotfish",               src: "img/naucrates_ductor.jpg",                cat: "pelagic" },
+  { name: "White trevally",          src: "img/pseudocaranx_dentex.jpg",              cat: "pelagic" },
+  { name: "Longfin yellowtail",      src: "img/seriola_rivoliana.jpg",               cat: "pelagic" },
+  { name: "Great barracuda",         src: "img/sphyraena_barracuda.jpg",              cat: "pelagic" },
+  { name: "Yellowfin tuna",          src: "img/thunnus_albacares.jpg",               cat: "pelagic" },
+  { name: "Yellow-tailed Grunt",     src: "img/yellow-tailed_grunt.jpg",             cat: "pelagic" },
+  { name: "Galapagos Mullet",        src: "img/galapagos_mullet.jpg",                cat: "pelagic" },
+  { name: "Longfin Halfbeak",        src: "img/longfin_halfbeak.jpg",               cat: "pelagic" },
+  // Nudibranchs
+  { name: "Blue-lined Galápagos Nudibranch",  src: "img/blue_lined_nudibranch.jpeg",        cat: "nudi" },
+  { name: "Spanish Shawl Nudibranch",         src: "img/spanish_shawl_nudibranch.jpeg",     cat: "nudi" },
+  { name: "Tyrannodoris leonis Nudibranch",   src: "img/tyrannodoris_leonis_nudibranch.jpeg",cat: "nudi" },
+  { name: "Agassiz Nudibranch",               src: "img/agassiz_nudibranch.jpeg",           cat: "nudi" },
+  { name: "Dark-spot Cadlina Nudibranch",     src: "img/dark_spot_cadlina_nudibranch.jpeg", cat: "nudi" },
+  { name: "White-spotted Nudibranch",         src: "img/white_spotted_nudibranch.jpeg",     cat: "nudi" },
+];
+
+// ── Categories ─────────────────────────────────────────────────────────────
+const CATEGORIES = {
+  iconic:  'Iconic animals',
+  shark:   'Sharks & Rays',
+  reef:    'Reef fish',
+  pelagic: 'Open water fish',
+  nudi:    'Nudibranchs',
+};
+let activeCategories = new Set(Object.keys(CATEGORIES));
+
+function getActiveAnimals() {
+  return ANIMALS.filter(a => activeCategories.has(a.cat));
+}
+
+// ── Config ─────────────────────────────────────────────────────────────────
+const PER_ROUND  = 6;    // animals per row (always 6)
+const NUM_ROUNDS = 13;   // rounds per game (repeats allowed)
+
+// ── Game state ─────────────────────────────────────────────────────────────
+let difficulty = 'medium';
+let rounds = [];        // array of animal-arrays (each PER_ROUND long)
+let roundIdx = 0;
+let totalMistakes = 0;
+let totalMatched  = 0;
+
+let roundAnimals  = [];  // current round's animals (photos, original order)
+let roundNames    = [];  // current round's names (shuffled)
+let matchedCount  = 0;
+let roundMistakes = 0;
+
+let selectedNameIdx  = null;  // click-mode: selected name tag
+let selectedPhotoIdx = null;  // click-mode: selected photo slot
+let wrongTimer = null;
+
+// ── Similar-animal groups (makes each round harder) ────────────────────────
+// Each group contains animals that look alike. buildRound() picks one group
+// as the "focus" and fills the round mostly with animals from that group.
+const SIMILAR_GROUPS = [
+  // Sharks (8) — all torpedo-shaped, easy to confuse
+  ["Whitetip Reef Shark", "Silky shark", "Sandbar shark", "Tiger shark",
+   "Blue shark", "Whale shark", "Scalloped hammerhead", "Shortfin mako"],
+  // Surgeonfish (4) — flat oval body, spines on tail
+  ["Golden rim surgeonfish", "Convict surgeonfish",
+   "Yellowfin surgeonfish", "Razor surgeonfish"],
+  // Morays (4) — eel-like, patterned
+  ["Zebra moray", "Yellow edged moray", "Giant moray", "Painted moray"],
+  // Butterflyfishes (5) — small, disc-shaped, boldly patterned
+  ["Blacklip butterflyfish", "Raccoon butterflyfish", "Long-nose butterflyfish",
+   "Three-banded Butterflyfish", "Blacknosed Butterflyfish / Barberfish"],
+  // Porcupinefishes / burrfish — spiny, round
+  ["Long-spine porcupinefish", "Spot-fin porcupinefish / Pacific Burrfish"],
+  // Trevallies (2) — silvery, forked tail
+  ["Giant trevally", "White trevally"],
+  // Rays (3) — flattened, wing-like pectoral fins
+  ["Spotted Eagle Ray", "Oceanic manta ray", "Pelagic stingray"],
+  // Pinnipeds (2) — furry, flippered
+  ["Galápagos Sea Lion", "Galápagos Fur Seal"],
+  // Damselfish (3) — small oval reef fish, similar body plan
+  ["Ringtail Damselfish", "Yellowtail Damselfish", "Giant Damselfish"],
+  // Mexican Hogfish phases — same species, very different colors by sex/age
+  ["Mexican Hogfish (female)", "Mexican Hogfish (young male)", "Mexican Hogfish (terminal male)"],
+  // Cortez Rainbow Wrasse phases
+  ["Cortez Rainbow Wrasse (terminal male)", "Cortez Rainbow Wrasse (female)", "Spinster Wrasse (male)"],
+  // Parrotfish — same species, male/female look totally different
+  ["Blue-chinned Parrotfish", "Blue-chinned Parrotfish"],
+  // Grunts (3) — similar schooling fish
+  ["Burrito Grunt", "Galapagos Grunt", "Yellow-tailed Grunt"],
+  // Nudibranchs (6) — all slug-like with cerata, very easy to confuse
+  ["Blue-lined Galápagos Nudibranch", "Spanish Shawl Nudibranch", "Tyrannodoris leonis Nudibranch",
+   "Agassiz Nudibranch", "Dark-spot Cadlina Nudibranch", "White-spotted Nudibranch"],
+];
+
+const _nameMap = Object.fromEntries(ANIMALS.map(a => [a.name, a]));
+
+function roundSize() { return difficulty === 'hard' ? PER_ROUND * 2 : PER_ROUND; }
+
+function buildRound() {
+  const size    = roundSize();
+  const active  = getActiveAnimals();
+  const activeNames = new Set(active.map(a => a.name));
+
+  // Helper: filter a SIMILAR_GROUPS entry to only names in the active pool
+  const activeFocus = g => g.filter(n => activeNames.has(n));
+
+  if (difficulty === 'easy') {
+    return dedupeByName(shuffle(active), size);
+  }
+
+  if (difficulty === 'hard') {
+    // Pick two different focus groups; fill remaining slots randomly
+    const shuffledGroups = shuffle([...SIMILAR_GROUPS]);
+    const focus1 = activeFocus(shuffledGroups[0]);
+    const focus2 = activeFocus(shuffledGroups[1]);
+    const focusNames = new Set([...focus1, ...focus2]);
+    let round = shuffle([...focus1, ...focus2].map(n => _nameMap[n]).filter(Boolean));
+    const others = shuffle(active.filter(a => !focusNames.has(a.name)));
+    round = round.concat(others);
+    return dedupeByName(round, size);
+  }
+
+  // Medium: pick a focus group, weighted by size so larger groups appear more often
+  // Only count active members when weighting
+  const activeGroups = SIMILAR_GROUPS.map(g => activeFocus(g)).filter(g => g.length > 1);
+  const totalWeight  = activeGroups.reduce((s, g) => s + g.length, 0);
+  let r = Math.random() * totalWeight;
+  let focus = activeGroups[activeGroups.length - 1] || [];
+  for (const g of activeGroups) {
+    r -= g.length;
+    if (r <= 0) { focus = g; break; }
+  }
+
+  // Take up to size animals from the focus group (shuffled)
+  const focusAnimals = shuffle(focus.map(n => _nameMap[n]).filter(Boolean));
+  let round = focusAnimals.slice(0, size);
+
+  // Fill remaining slots with random animals from outside the focus group
+  if (round.length < size) {
+    const focusSet = new Set(focus);
+    const others = shuffle(active.filter(a => !focusSet.has(a.name)));
+    round = round.concat(others);
+  }
+
+  return shuffle(dedupeByName(round, size));
+}
+
+// Ensure no two entries share a name (same species, different photo).
+// Backfills from the active animal pool when candidates run short.
+function dedupeByName(candidates, n = PER_ROUND) {
+  const seen = new Set();
+  const out  = [];
+  for (const a of candidates) {
+    if (a && !seen.has(a.name)) { seen.add(a.name); out.push(a); }
+    if (out.length === n) break;
+  }
+  if (out.length < n) {
+    for (const a of shuffle(getActiveAnimals())) {
+      if (!seen.has(a.name)) { seen.add(a.name); out.push(a); }
+      if (out.length === n) break;
+    }
+  }
+  return out;
+}
+
+// ── Shuffle ────────────────────────────────────────────────────────────────
+function shuffle(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+// ── Start game ─────────────────────────────────────────────────────────────
+function startGame(diff) {
+  difficulty = diff;
+  document.getElementById('shell').classList.toggle('hard', diff === 'hard');
+  document.getElementById('difficulty-screen').classList.remove('show');
+  document.getElementById('completion').classList.remove('show');
+  totalMistakes = 0;
+  totalMatched  = 0;
+  roundIdx      = 0;
+
+  rounds = Array.from({ length: difficulty === 'hard' ? 6 : NUM_ROUNDS }, buildRound);
+  startRound();
+}
+
+function startRound() {
+  if (wrongTimer) { clearTimeout(wrongTimer); wrongTimer = null; }
+  selectedNameIdx  = null;
+  selectedPhotoIdx = null;
+  matchedCount  = 0;
+  roundMistakes = 0;
+
+  roundAnimals = rounds[roundIdx];
+  roundNames   = shuffle([...roundAnimals]);
+
+  updateHeader();
+  renderPhotos();
+  renderNames();
+}
+
+function updateHeader() {
+  const total = rounds.length;
+  document.getElementById('round-info').textContent =
+    total > 1 ? `Round ${roundIdx + 1} of ${total}` : '';
+  const matched = totalMatched + matchedCount;
+  document.getElementById('score-info').textContent =
+    matched > 0 ? `${matched} matched` : 'Drag a name onto its photo';
+}
+
+// ── Render ─────────────────────────────────────────────────────────────────
+function makeSlot(animal, i) {
+  const slot = document.createElement('div');
+  slot.className = 'photo-slot fade-in';
+  slot.dataset.idx = i;
+
+  const img = document.createElement('img');
+  img.src      = animal.src;
+  img.alt      = 'Marine animal';
+  img.draggable = false;
+
+  const badge = document.createElement('div');
+  badge.className = 'badge';
+  badge.textContent = '?';
+
+  slot.appendChild(img);
+  slot.appendChild(badge);
+  slot.addEventListener('pointerdown', (e) => {
+    if (e.target.tagName === 'IMG' || e.target === slot || e.target === badge) {
+      onPhotoClick(i);
+    }
+  });
+  return slot;
+}
+
+function renderPhotos() {
+  const topRow = document.getElementById('photo-row');
+  const botRow = document.getElementById('photo-row-bottom');
+  topRow.innerHTML = '';
+  botRow.innerHTML = '';
+
+  roundAnimals.forEach((animal, i) => {
+    const slot = makeSlot(animal, i);
+    if (i < PER_ROUND) topRow.appendChild(slot);
+    else               botRow.appendChild(slot);
+  });
+}
+
+function renderNames() {
+  const row = document.getElementById('label-row');
+  row.innerHTML = '';
+  roundNames.forEach((animal, i) => {
+    const tag = document.createElement('div');
+    tag.className = 'name-tag fade-in';
+    tag.dataset.idx = i;
+    tag.textContent = animal.name;
+    tag.addEventListener('pointerdown', (e) => startDrag(e, i));
+    row.appendChild(tag);
+  });
+}
+
+function getPhotoSlots() {
+  return document.querySelectorAll('#photo-row .photo-slot, #photo-row-bottom .photo-slot');
+}
+function getNameTags() {
+  return document.querySelectorAll('#label-row .name-tag');
+}
+
+// ── Drag and drop (Pointer Events) ─────────────────────────────────────────
+const ghost = document.getElementById('drag-ghost');
+let dragging = false;
+
+function startDrag(e, nameIdx) {
+  if (wrongTimer) return;
+  const tag = document.querySelector(`.name-tag[data-idx="${nameIdx}"]`);
+  if (!tag || tag.classList.contains('placed')) return;
+
+  e.preventDefault();
+
+  // Clear any click-mode selection
+  clearClickSelections();
+
+  dragging = true;
+  ghost.textContent = roundNames[nameIdx].name;
+  ghost.style.display = 'block';
+  moveGhost(e.clientX, e.clientY);
+
+  function onMove(ev) {
+    moveGhost(ev.clientX, ev.clientY);
+    // Highlight slot under cursor
+    ghost.style.display = 'none';
+    const el = document.elementFromPoint(ev.clientX, ev.clientY);
+    ghost.style.display = 'block';
+    const slot = el && el.closest('.photo-slot:not(.correct)');
+    getPhotoSlots().forEach(s => s.classList.remove('drag-over'));
+    if (slot) slot.classList.add('drag-over');
+  }
+
+  function onUp(ev) {
+    document.removeEventListener('pointermove', onMove);
+    document.removeEventListener('pointerup',   onUp);
+    ghost.style.display = 'none';
+    getPhotoSlots().forEach(s => s.classList.remove('drag-over'));
+    dragging = false;
+
+    ghost.style.display = 'none';
+    const el = document.elementFromPoint(ev.clientX, ev.clientY);
+    const slot = el && el.closest('.photo-slot:not(.correct)');
+    if (slot) {
+      const photoIdx = parseInt(slot.dataset.idx);
+      checkMatch(nameIdx, photoIdx);
+    }
+  }
+
+  document.addEventListener('pointermove', onMove, { passive: false });
+  document.addEventListener('pointerup',   onUp);
+}
+
+function moveGhost(x, y) {
+  ghost.style.left = x + 'px';
+  ghost.style.top  = (y - 28) + 'px';
+}
+
+// ── Click-mode fallback ────────────────────────────────────────────────────
+function onPhotoClick(photoIdx) {
+  if (dragging || wrongTimer) return;
+  const slot = document.querySelector(`.photo-slot[data-idx="${photoIdx}"]`);
+  if (!slot || slot.classList.contains('correct')) return;
+
+  if (selectedNameIdx !== null) {
+    // Name already selected — attempt match
+    checkMatch(selectedNameIdx, photoIdx);
+    return;
+  }
+  // Toggle photo selection
+  if (selectedPhotoIdx === photoIdx) {
+    selectedPhotoIdx = null;
+    slot.classList.remove('selected-target');
+  } else {
+    // Deselect any prev photo
+    getPhotoSlots().forEach(s => s.classList.remove('selected-target'));
+    selectedPhotoIdx = photoIdx;
+    slot.classList.add('selected-target');
+  }
+}
+
+// Name click is handled by startDrag (pointerdown); if pointer didn't move,
+// treat as a tap/click selection:
+document.addEventListener('click', (e) => {
+  if (dragging) return;
+  const tag = e.target.closest('.name-tag:not(.placed)');
+  if (!tag) return;
+  const nameIdx = parseInt(tag.dataset.idx);
+
+  if (selectedPhotoIdx !== null) {
+    // Photo already selected — attempt match
+    checkMatch(nameIdx, selectedPhotoIdx);
+    return;
+  }
+  // Toggle name selection
+  if (selectedNameIdx === nameIdx) {
+    selectedNameIdx = null;
+    tag.classList.remove('selected');
+  } else {
+    getNameTags().forEach(t => t.classList.remove('selected'));
+    selectedNameIdx = nameIdx;
+    tag.classList.add('selected');
+  }
+}, true);
+
+function clearClickSelections() {
+  selectedNameIdx = null;
+  selectedPhotoIdx = null;
+  getNameTags().forEach(t => t.classList.remove('selected'));
+  getPhotoSlots().forEach(s => s.classList.remove('selected-target'));
+}
+
+// ── Match logic ────────────────────────────────────────────────────────────
+function checkMatch(nameIdx, photoIdx) {
+  const nameAnimal  = roundNames[nameIdx];
+  const photoAnimal = roundAnimals[photoIdx];
+  const tag  = document.querySelector(`.name-tag[data-idx="${nameIdx}"]`);
+  const slot = document.querySelector(`.photo-slot[data-idx="${photoIdx}"]`);
+  clearClickSelections();
+
+  if (nameAnimal.name === photoAnimal.name) {
+    // ✓ Correct
+    matchedCount++;
+    totalMatched++;
+    tag.classList.add('placed');
+    slot.classList.add('correct');
+    slot.querySelector('.badge').textContent = photoAnimal.name;
+    updateHeader();
+
+    if (matchedCount === roundAnimals.length) {
+      totalMistakes += roundMistakes;
+      setTimeout(() => {
+        roundIdx++;
+        if (roundIdx < rounds.length) {
+          startRound();
+        } else {
+          showCompletion();
+        }
+      }, 700);
+    }
+  } else {
+    // ✗ Wrong
+    roundMistakes++;
+    tag.classList.add('wrong-shake');
+    slot.classList.add('wrong');
+    wrongTimer = setTimeout(() => {
+      tag.classList.remove('wrong-shake');
+      slot.classList.remove('wrong');
+      wrongTimer = null;
+    }, 500);
+  }
+}
+
+// ── Completion ─────────────────────────────────────────────────────────────
+function showCompletion() {
+  const total = totalMatched;
+  document.getElementById('final-score').textContent = total + ' matched';
+  const m = totalMistakes;
+  const grades = [
+    [0,  'Perfect! No wrong guesses! \uD83C\uDF1F'],
+    [3,  'Excellent! \uD83D\uDC22'],
+    [6,  'Good job! \uD83E\uDDAD'],
+    [99, 'Keep studying \uD83D\uDC21'],
+  ];
+  document.getElementById('final-grade').textContent  = grades.find(([n]) => m <= n)[1];
+  document.getElementById('final-misses').textContent =
+    m === 0 ? '' : m + ' wrong guess' + (m === 1 ? '' : 'es');
+  document.getElementById('completion').classList.add('show');
+}
+
+// ── Category checkboxes ────────────────────────────────────────────────────
+(function initCategoryCheckboxes() {
+  const grid = document.getElementById('cat-grid');
+  for (const [key, label] of Object.entries(CATEGORIES)) {
+    const lbl = document.createElement('label');
+    lbl.className = 'cat-cb';
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.id   = 'cb-' + key;
+    cb.checked = true;
+    const sp = document.createElement('span');
+    sp.textContent = label;
+    lbl.appendChild(cb);
+    lbl.appendChild(sp);
+    cb.addEventListener('change', function () {
+      if (this.checked) activeCategories.add(key);
+      else              activeCategories.delete(key);
+      lbl.classList.toggle('off', !this.checked);
+    });
+    grid.appendChild(lbl);
+  }
+})();
+
+// ── Boot — difficulty screen shown by default via HTML class ───────────────
+</script>
 </body>
 </html>
