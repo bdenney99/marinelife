@@ -770,6 +770,8 @@ function renderPhotos() {
   const botRow = document.getElementById('photo-row-bottom');
   topRow.innerHTML = '';
   botRow.innerHTML = '';
+  topRow.scrollLeft = 0;
+  botRow.scrollLeft = 0;
 
   roundAnimals.forEach((animal, i) => {
     const slot = makeSlot(animal, i);
