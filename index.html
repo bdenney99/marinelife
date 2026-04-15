@@ -53,14 +53,14 @@
   #photo-row, #photo-row-bottom {
     display: flex;
     gap: 8px;
-    flex: 0 0 38vh;    /* fixed ~38% of viewport height */
+    flex: 0 0 30vh;    /* fixed ~30% of viewport height */
     min-height: 0;
   }
   #photo-row-bottom { display: none; }
 
   /* Hard mode: two smaller photo rows sandwiching the labels */
   #shell.hard #photo-row,
-  #shell.hard #photo-row-bottom { flex: 0 0 28vh; display: flex; }
+  #shell.hard #photo-row-bottom { flex: 0 0 22vh; display: flex; }
 
   .photo-slot {
     flex: 1;
@@ -344,14 +344,14 @@
       overflow-y: hidden;
       -webkit-overflow-scrolling: touch;
       flex-wrap: nowrap;
-      flex: 0 0 38vh;
+      flex: 0 0 30vh;
       scrollbar-width: none; /* hide scrollbar on Firefox */
     }
     #photo-row::-webkit-scrollbar,
     #photo-row-bottom::-webkit-scrollbar { display: none; }
 
     #shell.hard #photo-row,
-    #shell.hard #photo-row-bottom { flex: 0 0 28vh; }
+    #shell.hard #photo-row-bottom { flex: 0 0 22vh; }
 
     .photo-slot {
       flex: 0 0 220px; /* fixed width; 6 slots = ~1400px, wider than phone */
